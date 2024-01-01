@@ -15,18 +15,22 @@ export async function useBasicAuth(req, res, next) {
   const authHeader = req.headers.authorization; //
   if (!authHeader) return invalidLogin;
   const [authType, authInfoBase64] = authHeader.split(" ");
+  // new small error Handling
   if (authType !== "Basic" || !authInfoBase64) return invalidLogin;
 
   /// base64 -> klartext
   const authInfo = decodeBase64(authInfoBase64); //
   const [email, password] = authInfo.split(":"); //
+  // new small error Handling
   if (!email || !password) return invalidLogin;
 
   // Email & Password verification
   const user = await User.findOne({ email });
+  // new small error Handling
   if (!user) return invalidLogin;
 
   const passwordMatch = user.password === password;
+  // new small error Handling
   if (!passwordMatch) return invalidLogin;
 
   next(); // geh zum eigentlichen request handler
