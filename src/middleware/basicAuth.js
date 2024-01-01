@@ -4,34 +4,41 @@ const decodeBase64 = (base64String) =>
   Buffer.from(base64String, "base64").toString();
 
 export async function useBasicAuth(req, res, next) {
-  const invalidLogin = () => {
-    res.status(401).json({
-      success: false,
-      error: "Invalid login",
-    });
-  };
+  // wiederverwendbare funktion _invalidLogin
+  const _invalidLogin = () =>
+    res.status(401).json({ success: false, error: "Invalid login" }); // So wenig Informationen wie möglich geben (um Angreifer nicht zu helfen)
 
   // auth logic
   const authHeader = req.headers.authorization; //
-  if (!authHeader) return invalidLogin;
+  if (!authHeader) {
+    return _invalidLogin();
+  }
   const [authType, authInfoBase64] = authHeader.split(" ");
   // new small error Handling
-  if (authType !== "Basic" || !authInfoBase64) return invalidLogin;
+  if (authType !== "Basic" || !authInfoBase64) {
+    return _invalidLogin();
+  }
 
   /// base64 -> klartext
   const authInfo = decodeBase64(authInfoBase64); //
   const [email, password] = authInfo.split(":"); //
   // new small error Handling
-  if (!email || !password) return invalidLogin;
+  if (!email || !password) {
+    return _invalidLogin();
+  }
 
   // Email & Password verification
   const user = await User.findOne({ email });
   // new small error Handling
-  if (!user) return invalidLogin;
+  if (!user) {
+    return _invalidLogin();
+  }
 
   const passwordMatch = user.password === password;
   // new small error Handling
-  if (!passwordMatch) return invalidLogin;
+  if (!passwordMatch) {
+    return _invalidLogin();
+  }
 
   next(); // geh zum eigentlichen request handler
 }
