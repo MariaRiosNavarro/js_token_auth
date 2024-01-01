@@ -1,5 +1,9 @@
 # js_token_auth
 
+jsonwebtoken library
+
+https://www.npmjs.com/package/jsonwebtoken
+
 POST 1 Boot or Get 1 Boot routes are JSON TOKEN secured and can only be accessed via login
 
 npm init -y

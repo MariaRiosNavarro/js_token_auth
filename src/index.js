@@ -4,7 +4,11 @@ import cors from "cors";
 import morgan from "morgan";
 import mongoose from "mongoose";
 import { Boot } from "./models/Boot.js";
+import { User } from "./models/User.js";
 import { useBasicAuth } from "./middleware/basicAuth.js";
+import { hashPassword } from "./utils/hash.js";
+import { generateToken } from "./utils/jwt.js";
+import { useJwtTokenAuth } from "./middleware/jwtTokenAuth.js";
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -25,18 +29,15 @@ app.get("/api/boot", async (_, res) => {
   }
 });
 
-// --------------PROTECTed ROUTES WITH useBasicAuth Middleware
+// --------------PROTECTed ROUTES WITH TOKEN Middleware
 
-// //  machen eine Function mit Buffer um in die Protected ruten zu nutzen
-
-// const decodeBase64 = (base64String) =>
-//   Buffer.from(base64String, "base64").toString();
-
-// Protected Route(*)
+// Protected Route(*) - wechseln der basic für die token
+// dann mussen wir den token in header senden
 // Get one
 app.get(
   "/api/boot/:bootId",
-  useBasicAuth, // entweder scheitert die auth ----- OOOOODER --> next()
+  // useBasicAuth, //
+  useJwtTokenAuth,
   async (req, res) => {
     try {
       const boot = await Boot.findById(req.params.bootId).exec();
@@ -51,25 +52,85 @@ app.get(
 
 // Protected Route(*)
 // Add One
-app.post("/api/boot", express.json(), useBasicAuth, async (req, res) => {
+app.post(
+  "/api/boot",
+  express.json(),
+  //   useBasicAuth,
+  useJwtTokenAuth,
+  async function postAddBoot(req, res) {
+    try {
+      const boot = await Boot.create({
+        name: req.body.name,
+        preis: req.body.preis,
+        besitzer: req.body.besitzer,
+        ownerId: new mongoose.Types.ObjectId(
+          req.authenticatedUserTokenPayload.sub
+        ),
+      });
+      res.status(201).json({ success: true, result: boot });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ success: false, error });
+    }
+  }
+);
+
+// -----------LOGIN ROUTE
+
+// BASIC LOGIN
+
+app.post(
+  "/api/login/basic",
+  express.json(),
+  useBasicAuth,
+  function postLogin(_, res) {
+    // wenn ich an diesen Punkt gelange wurde ich erfolgreich authentifiziert (aufgrund der useBasicAuth middleware, sonst hätte die mit res.status(401) abgebrochen)
+    // mit dem einfach success true weiß das FE bescheid, dass es username und password zu speichern sind (für zukünftige Abfragen)
+    res.json({ success: true });
+  }
+);
+
+// NEUE LOGIN FÜR TOKENS
+
+app.post("/api/login", express.json(), async (req, res) => {
+  const _invalidLogin = () =>
+    res.status(401).json({ success: false, error: "Invalid login" }); // So wenig Informationen wie möglich geben (um Angreifer nicht zu helfen)
+  const email = req.body.email;
+  const passwordClearText = req.body.password;
+  const user = await User.findOne({ email });
+  if (!user) return _invalidLogin();
+  const passwordMatch =
+    user.password === hashPassword(passwordClearText, user.passwordSalt);
+  if (!passwordMatch) return _invalidLogin();
+
+  // login success
+  const token = generateToken(user);
+  //
+  res.json({ success: true, result: { token } });
+  // Man konnte in zukunft ein refresh token oder anderen infromationen mitsenden
+});
+
+//
+
+// POST/Register,
+
+// Suchen sha512 in node.js in google (https://www.nodejsera.com/snippets/nodejs/sha512-hash.html)
+// Nutzen Crypto ist in node Installiert
+
+app.post("/api/register", express.json(), async (req, res) => {
   try {
-    const boot = await Boot.create({
-      name: req.body.name,
-      preis: req.body.preis,
-      besitzer: req.body.besitzer,
+    const user = await User.create({
+      vorname: req.body.vorname,
+      nachname: req.body.nachname,
+      email: req.body.email,
+      password: req.body.password,
+      // password: hash(req.body.password), //wir nutzen hier unsere HASH funktion
     });
-    res.status(201).json({ success: true, result: boot });
+    res.status(201).json({ success: true, result: user });
   } catch (error) {
     console.log("Error is", error);
     res.status(500).json({ success: false, error });
   }
-});
-
-// -----------LOGIN ROUTE
-
-app.post("/api/login", express.json(), useBasicAuth, (_, res) => {
-  res.json({ success: true }); //wenn ich hier gelange würde ich autentifiziert, aufgrund der Middelware (useBasicAuth)
-  // mit den einfach success true weiß den Frontend bescheid, dass user und password zu speichern sind, für zukünftige Anfragen
 });
 
 const setup = async () => {

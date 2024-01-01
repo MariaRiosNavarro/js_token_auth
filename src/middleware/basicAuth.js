@@ -1,4 +1,5 @@
 import { User } from "../models/User.js";
+import { hashPassword } from "../utils/hash.js";
 
 const decodeBase64 = (base64String) =>
   Buffer.from(base64String, "base64").toString();
@@ -9,33 +10,34 @@ export async function useBasicAuth(req, res, next) {
     res.status(401).json({ success: false, error: "Invalid login" }); // So wenig Informationen wie möglich geben (um Angreifer nicht zu helfen)
 
   // auth logic
-  const authHeader = req.headers.authorization; //
+  const authHeader = req.headers.authorization; // eg: 'Basic dG9tLnMyMzQ1NkBnbWFpbC5jb206dG9tMTIzYWJj'
   if (!authHeader) {
     return _invalidLogin();
   }
   const [authType, authInfoBase64] = authHeader.split(" ");
-  // new small error Handling
   if (authType !== "Basic" || !authInfoBase64) {
     return _invalidLogin();
   }
 
   /// base64 -> klartext
-  const authInfo = decodeBase64(authInfoBase64); //
-  const [email, password] = authInfo.split(":"); //
-  // new small error Handling
-  if (!email || !password) {
+  const authInfo = decodeBase64(authInfoBase64); // eg: 'tom.s23456@gmail.com:tom123abc'
+  const [email, passwordClearText] = authInfo.split(":"); // ['tom.s23456@gmail.com', 'tom123abc']
+  if (!email || !passwordClearText) {
     return _invalidLogin();
   }
 
-  // Email & Password verification
+  // email & password
   const user = await User.findOne({ email });
-  // new small error Handling
   if (!user) {
     return _invalidLogin();
   }
 
-  const passwordMatch = user.password === password;
-  // new small error Handling
+  // old match -> if clear text password in database
+  // const passwordMatch = user.password === password;
+
+  const passwordMatch =
+    user.password === hashPassword(passwordClearText, user.passwordSalt);
+
   if (!passwordMatch) {
     return _invalidLogin();
   }
